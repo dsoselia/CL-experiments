@@ -29,9 +29,14 @@ def index(matrix, a):
 from keras.datasets import mnist
 
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
+
+
 x = x_train.reshape(x_train.shape[0], x_train.shape[1]**2)
 x_test = x_test.reshape(x_test.shape[0], x_test.shape[1]**2)
-
+x = x.astype('float32')
+x_test = x_test.astype('float32')
+x = x / 255
+x_test = x_test/ 255
 y = to_categorical(y_train)
 y_test = to_categorical(y_test)
 
@@ -40,8 +45,6 @@ y_test = to_categorical(y_test)
 model = Sequential()
 model.add(Dense(x.shape[1], activation='relu'))
 model.add(Dense(512, activation='relu'))
-model.add(Dense(256, activation='relu'))
-model.add(Dense(64, activation='relu'))
 model.add(Dense(y.shape[1], activation='softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
