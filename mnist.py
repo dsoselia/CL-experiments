@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Oct 10 17:29:10 2018
+Created on Sat Oct 13 18:43:53 2018
 
 @author: davitisoselia
 """
+
+
 import numpy as np
 import pandas as pd
 from keras.utils  import to_categorical
@@ -24,37 +26,22 @@ def index(matrix, a):
     #print(matrix.shape)
     return ([(int(a/matrix.shape[1])), a%int(matrix.shape[1])])
 
-my_data = np.array(pd.read_csv('HTRU_2.csv', sep=',',header=None))
+from keras.datasets import mnist
 
-x = my_data[:,0:8]
-y = my_data[:,8]
+(x_train, y_train), (x_test, y_test) = mnist.load_data()
+x = x_train.reshape(x_train.shape[0], x_train.shape[1]**2)
+x_test = x_test.reshape(x_test.shape[0], x_test.shape[1]**2)
 
-y = to_categorical(y)
-num_classes = 2
-x = preprocessing.scale(x)
-
-x_test = []
-y_test = []
-test_size = 500
-flip = 0
-for i in range(test_size):
-    if y[i][0] == flip:
-        x_test.append(x[i])
-        y_test.append(y[i])
-        flip = 1-flip
-x_test = np.array(x_test)
-y_test =  np.array(y_test)
-#y_test = y_test.reshape(y_test.shape[0], 1)
-x  = x[500:]
-y = y[500:]
-#y = y.reshape(y.shape[0], 1)
+y = to_categorical(y_train)
+y_test = to_categorical(y_test)
 
 
 
 model = Sequential()
 model.add(Dense(x.shape[1], activation='relu'))
-model.add(Dense(30, activation='relu'))
-model.add(Dense(15, activation='relu'))
+model.add(Dense(512, activation='relu'))
+model.add(Dense(256, activation='relu'))
+model.add(Dense(64, activation='relu'))
 model.add(Dense(y.shape[1], activation='softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
@@ -62,7 +49,7 @@ y_ints = [y.argmax() for y in y]
 class_weights = class_weight.compute_class_weight('balanced',
                                                  np.unique(y_ints),
                                                  y_ints)
-model.fit(x,y,epochs = 20,verbose=1, class_weight=class_weights, validation_data = (x_test, y_test))
+model.fit(x,y,epochs = 20,verbose=1, validation_data = (x_test, y_test))
 
 model.evaluate(x, y)
 model.evaluate(x_test, y_test)
@@ -117,9 +104,4 @@ for i in range(0,len(m),2):
     ind += 1
 model.set_weights(w)
 model.evaluate(x_test,y_test)
-
-
-
-
-
 
