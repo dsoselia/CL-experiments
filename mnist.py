@@ -18,7 +18,10 @@ from keras.models import Sequential
 from keras.layers import Activation
 from keras.optimizers import SGD
 from keras.layers import Dense
+from keras.layers import Dropout
+
 import numpy as np
+from keras import backend as K
 
 from sklearn.utils import class_weight
 
@@ -45,6 +48,11 @@ y_test = to_categorical(y_test)
 model = Sequential()
 model.add(Dense(x.shape[1], activation='relu'))
 model.add(Dense(512, activation='relu'))
+model.add(Dropout(0.2))
+model.add(Dense(256, activation='relu'))
+model.add(Dropout(0.2))
+model.add(Dense(64, activation='relu'))
+model.add(Dropout(0.2))
 model.add(Dense(y.shape[1], activation='softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
@@ -72,7 +80,7 @@ get_gradients = K.function(inputs=input_tensors, outputs=gradients)
 
 inputs = [X, # X input data
           [1], # sample weights
-          [[1]], # y labels
+          y, # y labels
           0 # learning phase in TEST mode
 ]
 
@@ -80,16 +88,16 @@ inputs = [X, # X input data
 m = [a for a in zip(weights, get_gradients(inputs))]
 annihilated = []
 maxs = []
-for i in range(0,len(m),2):
+for i in range(0,len(m)-1,2):
     maxs.append([])
     min_num = 0
     while(min_num<m[i][1].shape[0]*m[i][1].shape[1]/4):
         #min = index(m[i][1], np.abs(np.argmax(m[i][1])))
         max_val = index(m[i][1], (np.argmax(np.abs(m[i][1]))))
-        if (m[i][1][max_val[0]][max_val[1]] != np.abs(m[i][1]).max()):
-            print("error")
-            print(m[i][1][max_val[0]][max_val[1]])
-            print(np.abs(m[i][1]).max())
+        #if (m[i][1][max_val[0]][max_val[1]] != np.abs(m[i][1]).max()):
+       #     print("error")
+      #      print(m[i][1][max_val[0]][max_val[1]])
+       #     print(np.abs(m[i][1]).max())
         m[i][1][max_val[0]][max_val[1]] = 0
         maxs[-1].append(max_val)
         min_num+=1
@@ -97,7 +105,7 @@ for i in range(0,len(m),2):
 
 w = model.get_weights()
 ind  = 0
-for i in range(0,len(m),2):
+for i in range(0,len(m)-1,2):
     #print(ind)
     #print(maxs[ind])
     for max_value in maxs[ind]:
