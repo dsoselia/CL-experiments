@@ -14,10 +14,10 @@ from sklearn import preprocessing
 import keras
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
-from keras.models import Sequential
+from keras.models import Model
 from keras.layers import Activation
 from keras.optimizers import SGD
-from keras.layers import Dense
+from keras.layers import Input, Dense
 from keras.layers import Dropout
 
 import numpy as np
@@ -187,17 +187,13 @@ def overwrite(model,mats):
 
 
 
-model = Sequential()
-model.add(Dense(x.shape[1], activation='relu'))
-model.add(Dense(512, activation='relu'))
-model.add(Dropout(0.2))
-model.add(Dense(256, activation='relu'))
-model.add(Dropout(0.2))
-model.add(Dense(64, activation='relu'))
-model.add(Dropout(0.2))
-model.add(Dense(10, activation='softmax'))
+input = Input(shape=(x_train.shape[1]**2,))
+x = Dense(x.shape[1], activation='relu')(input)
+x = Dense(512, activation='relu')(x)
+output = Dense(y.shape[1], activation='softmax')
+model = Model(input,output)
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
-model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy']) 
 model = train(x_train_lower, y_train_lower,x_test_lower, y_test_lower , 10, model)
 
 safe_weights_stash = get_safe_weights_caller((x_test_lower), (y_test_lower), model)
