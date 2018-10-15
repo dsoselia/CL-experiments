@@ -112,57 +112,62 @@ model = train(x_train_lower, y_train_lower,x_test_lower, y_test_lower , 10, mode
 model = train(x_train_upper, y_train_upper,x_test_upper, y_test_upper ,  10, model)
 
 
-xdevaluate((x_test_upper), (y_test_upper))
+evaluate((x_test_upper), (y_test_upper))
 
+def get_safe_weights_caller(x,y, model):
+    x = np.array(x)
+    x = x.reshape(x.shape[0], x.shape[1]**2)
+    x = x.astype('float32')
+    x = x / 255
+    y = to_categorical(np.append(y, 9))[:-1]
+    return get_safe_weights(x,y,model)
 
-X=x
-
-weights = model.weights # weight tensors
-gradients = model.optimizer.get_gradients(model.total_loss, weights) # gradient tensors
-
-input_tensors = [model.inputs[0], # input data
-                 model.sample_weights[0], # sample weights
-                 model.targets[0], # labels
-                 K.learning_phase(), # train or test mode
-]
-get_gradients = K.function(inputs=input_tensors, outputs=gradients)
-
-inputs = [X, # X input data
-          [1], # sample weights
-          y, # y labels
-          0 # learning phase in TEST mode
-]
-
-#print([a for a in zip(weights, get_gradients(inputs))])
-m = [a for a in zip(weights, get_gradients(inputs))]
-annihilated = []
-maxs = []
-for i in range(0,len(m)-1,2):
-    maxs.append([])
-    min_num = 0
-    while(min_num<m[i][1].shape[0]*m[i][1].shape[1]/5):
-        #min = index(m[i][1], np.abs(np.argmax(m[i][1])))
-        max_val = index(m[i][1], (np.argmin(np.abs(m[i][1]))))
-        #if (m[i][1][max_val[0]][max_val[1]] != np.abs(m[i][1]).max()):
-       #     print("error")
-      #      print(m[i][1][max_val[0]][max_val[1]])
-       #     print(np.abs(m[i][1]).max())
-        m[i][1][max_val[0]][max_val[1]] = 100
-        maxs[-1].append(max_val)
-        min_num+=1
-        
-
-w = model.get_weights()
-ind  = 0
-for i in range(0,len(m)-1,2):
-    #print(ind)
-    #print(maxs[ind])
-    for max_value in maxs[ind]:
-        weight_to_change = [i,max_value[0],max_value[1]]
-        w[weight_to_change[0]][weight_to_change[1]][weight_to_change[2]] = 0
-        annihilated.append(weight_to_change)
-    ind += 1
+def get_safe_weights(x,y,model):
+    X=x
+    
+    weights = model.weights # weight tensors
+    gradients = model.optimizer.get_gradients(model.total_loss, weights) # gradient tensors
+    
+    input_tensors = [model.inputs[0], # input data
+                     model.sample_weights[0], # sample weights
+                     model.targets[0], # labels
+                     K.learning_phase(), # train or test mode
+    ]
+    get_gradients = K.function(inputs=input_tensors, outputs=gradients)
+    
+    inputs = [X, # X input data
+              [1], # sample weights
+              y, # y labels
+              0 # learning phase in TEST mode
+    ]
+    
+    #print([a for a in zip(weights, get_gradients(inputs))])
+    m = [a for a in zip(weights, get_gradients(inputs))]
+    annihilated = []
+    maxs = []
+    for i in range(0,len(m)-1,2):
+        maxs.append([])
+        min_num = 0
+        while(min_num<m[i][1].shape[0]*m[i][1].shape[1]/2):
+            max_val = index(m[i][1], (np.argmax(np.abs(m[i][1]))))
+            m[i][1][max_val[0]][max_val[1]] = 0
+            maxs[-1].append(max_val)
+            min_num+=1
+            
+    
+    w = model.get_weights()
+    ind  = 0
+    for i in range(0,len(m)-1,2):
+        #print(ind)
+        #print(maxs[ind])
+        for max_value in maxs[ind]:
+            weight_to_change = [i,max_value[0],max_value[1]]
+            w[weight_to_change[0]][weight_to_change[1]][weight_to_change[2]] = 0
+            annihilated.append(weight_to_change)
+        ind += 1
+    return w
+tak = get_safe_weights_caller((x_test_upper), (y_test_upper), model)
+'''
 model.set_weights(w)
 model.evaluate(x_test,y_test)
-
-
+'''
