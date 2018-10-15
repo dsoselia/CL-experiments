@@ -139,7 +139,7 @@ def get_safe_weights(x,y,model):
       
     m = [a for a in zip(trainables, get_gradients())]
     annihilated = []
-    meta_maxs=p[] 
+    meta_maxs=[] 
     for i in range(0,len(m)-1):
        maxs = []
        for j in m[i][1]:
