@@ -14,10 +14,10 @@ from sklearn import preprocessing
 import keras
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
-from keras.models import Sequential
+from keras.models import Model
 from keras.layers import Activation
 from keras.optimizers import SGD
-from keras.layers import Dense
+from keras.layers import Input, Dense
 import numpy as np
 
 from sklearn.utils import class_weight
@@ -42,10 +42,14 @@ y_test = to_categorical(y_test)
 
 
 
-model = Sequential()
-model.add(Dense(x.shape[1], activation='relu'))
-model.add(Dense(512, activation='relu'))
-model.add(Dense(y.shape[1], activation='softmax'))
+#model = Sequential()
+
+input = Input(shape=(x_train.shape[1]**2,))
+
+x = Dense(x.shape[1], activation='relu')(input)
+x = Dense(512, activation='relu')(x)
+output = Dense(y.shape[1], activation='softmax')
+model = Model(input,output)
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
 y_ints = [y.argmax() for y in y]
@@ -63,13 +67,39 @@ X=x
 weights = model.weights # weight tensors
 gradients = model.optimizer.get_gradients(model.total_loss, weights) # gradient tensors
 
+
+
 input_tensors = [model.inputs[0], # input data
                  model.sample_weights[0], # sample weights
                  model.targets[0], # labels
                  K.learning_phase(), # train or test mode
 ]
-get_gradients = K.function(inputs=input_tensors, outputs=gradients)
 
+#gradients_1: dictionary{layer: weight gradient list}
+#for each trainable layer:
+#   gradients_1[layer]=get_gradient(layer,nextlayer)
+
+
+gradients={}
+trainables = [x for x in self.model.layers if x.trainable is True]
+trainable_weights = [x.get_weights() for x in trainables]
+i_max = len(trainables)
+
+
+for i in range(i_max-1, -1):
+   temp_model=Model(input,trainables[i])
+   temp_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+   temp_layers = [la for la in temp_model.layers if la.trainable is True]
+   temp_length = len(temp_layers)
+   for j in range(0,temp_length):
+      temp_layers[j].set_weights(trainable_weights[j])
+   gradients[trainables[i]] = temp_model.optimizers.get_gradients(temp_model.total_loss, trainables[i].weights)
+   
+
+
+
+
+  
 inputs = [X, # X input data
           [1], # sample weights
           [[1]], # y labels
