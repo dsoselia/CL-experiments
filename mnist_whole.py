@@ -117,15 +117,10 @@ def get_safe_weights(x,y,model):
                      model.targets[0], # labels
                      K.learning_phase(), # train or test mode
     ]
+
     #get_gradients = K.function(inputs=input_tensors, outputs=gradients)
-    
-    inputs = [X, # X input data
-              [1], # sample weights
-              y, # y labels
-              0 # learning phase in TEST mode
-    ]
-    
-    #print([a for a in zip(weights, get_gradients(inputs))])
+
+
     trainables = [x for x in model.layers if x.trainable is True]
     trainable_weights = [x.get_weights() for x in trainables]
     
@@ -171,6 +166,7 @@ def get_safe_weights(x,y,model):
       changed_weights.append(l)
       
     return changed_weights
+
 #tak = get_safe_weights_caller((x_test_upper), (y_test_upper), model)
 '''
 model.set_weights(w)
