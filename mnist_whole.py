@@ -64,7 +64,7 @@ for i, label in enumerate(y_test):
         x_test_upper.append(x)
         y_test_upper.append(y)
         
-def train(x , y, x_test, y_test, class_number, model ):
+def train(x , y, x_test, y_test, class_number, model, epochs = 3 ):
     x = np.array(x)
     x_test = np.array(x_test)
     x = x.reshape(x.shape[0], x.shape[1]**2)
@@ -81,7 +81,7 @@ def train(x , y, x_test, y_test, class_number, model ):
     class_weights = class_weight.compute_class_weight('balanced',
                                                      np.unique(y_ints),
                                                      y_ints)
-    model.fit(x,y,epochs = 3,verbose=1, validation_data = (x_test, y_test))
+    model.fit(x,y,epochs = epochs,verbose=1, validation_data = (x_test, y_test))
     
     model.evaluate(x, y)
     model.evaluate(x_test, y_test)
@@ -93,27 +93,11 @@ def evaluate(x,y):
     x = x.astype('float32')
     x = x / 255
     y = to_categorical(np.append(y, 9))[:-1]
-    print(y[:5])
+    #print(y[:5])
     print(model.evaluate(x, y))
 
 
-model = Sequential()
-model.add(Dense(x.shape[1], activation='relu'))
-model.add(Dense(512, activation='relu'))
-model.add(Dropout(0.2))
-model.add(Dense(256, activation='relu'))
-model.add(Dropout(0.2))
-model.add(Dense(64, activation='relu'))
-model.add(Dropout(0.2))
-model.add(Dense(10, activation='softmax'))
-
-model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy']) 
-model = train(x_train_lower, y_train_lower,x_test_lower, y_test_lower , 10, model)
-model = train(x_train_upper, y_train_upper,x_test_upper, y_test_upper ,  10, model)
-
-
-evaluate((x_test_upper), (y_test_upper))
-
+devisor = 0.4
 def get_safe_weights_caller(x,y, model):
     x = np.array(x)
     x = x.reshape(x.shape[0], x.shape[1]**2)
@@ -148,7 +132,7 @@ def get_safe_weights(x,y,model):
     for i in range(0,len(m)-1,2):
         maxs.append([])
         min_num = 0
-        while(min_num<m[i][1].shape[0]*m[i][1].shape[1]/2):
+        while(min_num<m[i][1].shape[0]*m[i][1].shape[1]*devisor):
             max_val = index(m[i][1], (np.argmax(np.abs(m[i][1]))))
             m[i][1][max_val[0]][max_val[1]] = 0
             maxs[-1].append(max_val)
@@ -165,19 +149,48 @@ def get_safe_weights(x,y,model):
             w[weight_to_change[0]][weight_to_change[1]][weight_to_change[2]] = 0
             annihilated.append(weight_to_change)
         ind += 1
-    return w
-tak = get_safe_weights_caller((x_test_upper), (y_test_upper), model)
+    return [np.copy(layer) for layer in  w]
+#tak = get_safe_weights_caller((x_test_upper), (y_test_upper), model)
 '''
 model.set_weights(w)
 model.evaluate(x_test,y_test)
 '''
 
-def overwrite(values,mats)
+def overwrite(model,mats):
+    values = model.get_weights()
     new_mats=[]
     new_values=[]
     for matrix in mats:
         new_mats.append((matrix==0).astype(int))
     for i in range(len(values)):
         new_values.append((new_mats[i]*values[i])+mats[i])
-    return new_values 
+    #print(values)
+    #print(new_values)
+    return new_values
 
+
+
+model = Sequential()
+model.add(Dense(x.shape[1], activation='relu'))
+model.add(Dense(512, activation='relu'))
+model.add(Dropout(0.2))
+model.add(Dense(256, activation='relu'))
+model.add(Dropout(0.2))
+model.add(Dense(64, activation='relu'))
+model.add(Dropout(0.2))
+model.add(Dense(10, activation='softmax'))
+
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy']) 
+model = train(x_train_lower, y_train_lower,x_test_lower, y_test_lower , 10, model)
+
+safe_weights_stash = get_safe_weights_caller((x_test_lower), (y_test_lower), model)
+
+#print(model.summary())
+for i in range(1):
+    model = train(x_train_upper, y_train_upper,x_test_upper, y_test_upper ,  10, model, 1)
+    new_values = overwrite(model, safe_weights_stash)
+    model.set_weights(new_values)
+
+evaluate((x_test_lower), (y_test_lower))
+evaluate((x_test_upper), (y_test_upper))
+evaluate(x_test,y_test)
