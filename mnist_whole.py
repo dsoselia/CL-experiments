@@ -31,18 +31,70 @@ def index(matrix, a):
 
 from keras.datasets import mnist
 
+from keras.datasets import mnist
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
+    
+x_train_lower = [] # corresponding to labels 0-4
+y_train_lower = []
+x_test_lower = []
+y_test_lower = []
+    
+x_train_upper = [] # corresponding to labels 5-9
+y_train_upper = []
+x_test_upper = []
+y_test_upper = []
+    
+for i, label in enumerate(y_train):
+    x = x_train[i] 
+    y = y_train[i]
+    if label < 5:  
+        x_train_lower.append(x)
+        y_train_lower.append(y)
+    else:                           
+        x_train_upper.append(x)
+        y_train_upper.append(y)
+                
+for i, label in enumerate(y_test):
+    x = x_test[i] 
+    y = y_test[i]
+    if label < 5:  
+        x_test_lower.append(x)
+        y_test_lower.append(y)
+    else:                          
+        x_test_upper.append(x)
+        y_test_upper.append(y)
+        
+def train(x , y, x_test, y_test, class_number, model ):
+    x = np.array(x)
+    x_test = np.array(x_test)
+    x = x.reshape(x.shape[0], x.shape[1]**2)
+    x_test = x_test.reshape(x_test.shape[0], x_test.shape[1]**2)
+    x = x.astype('float32')
+    x_test = x_test.astype('float32')
+    x = x / 255
+    x_test = x_test/ 255
+    y = to_categorical(np.append(y, 9))[:-1]
+    y_test = to_categorical(np.append(y_test, 9))[:-1]
 
+    
+    y_ints = [y.argmax() for y in y]
+    class_weights = class_weight.compute_class_weight('balanced',
+                                                     np.unique(y_ints),
+                                                     y_ints)
+    model.fit(x,y,epochs = 3,verbose=1, validation_data = (x_test, y_test))
+    
+    model.evaluate(x, y)
+    model.evaluate(x_test, y_test)
+    return model
 
-x = x_train.reshape(x_train.shape[0], x_train.shape[1]**2)
-x_test = x_test.reshape(x_test.shape[0], x_test.shape[1]**2)
-x = x.astype('float32')
-x_test = x_test.astype('float32')
-x = x / 255
-x_test = x_test/ 255
-y = to_categorical(y_train)
-y_test = to_categorical(y_test)
-
+def evaluate(x,y):
+    x = np.array(x)
+    x = x.reshape(x.shape[0], x.shape[1]**2)
+    x = x.astype('float32')
+    x = x / 255
+    y = to_categorical(np.append(y, 9))[:-1]
+    print(y[:5])
+    print(model.evaluate(x, y))
 
 
 model = Sequential()
@@ -53,17 +105,14 @@ model.add(Dense(256, activation='relu'))
 model.add(Dropout(0.2))
 model.add(Dense(64, activation='relu'))
 model.add(Dropout(0.2))
-model.add(Dense(y.shape[1], activation='softmax'))
-model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+model.add(Dense(10, activation='softmax'))
 
-y_ints = [y.argmax() for y in y]
-class_weights = class_weight.compute_class_weight('balanced',
-                                                 np.unique(y_ints),
-                                                 y_ints)
-model.fit(x,y,epochs = 20,verbose=1, validation_data = (x_test, y_test))
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy']) 
+model = train(x_train_lower, y_train_lower,x_test_lower, y_test_lower , 10, model)
+model = train(x_train_upper, y_train_upper,x_test_upper, y_test_upper ,  10, model)
 
-model.evaluate(x, y)
-model.evaluate(x_test, y_test)
+
+xdevaluate((x_test_upper), (y_test_upper))
 
 
 X=x
@@ -91,14 +140,14 @@ maxs = []
 for i in range(0,len(m)-1,2):
     maxs.append([])
     min_num = 0
-    while(min_num<m[i][1].shape[0]*m[i][1].shape[1]/4):
+    while(min_num<m[i][1].shape[0]*m[i][1].shape[1]/5):
         #min = index(m[i][1], np.abs(np.argmax(m[i][1])))
-        max_val = index(m[i][1], (np.argmax(np.abs(m[i][1]))))
+        max_val = index(m[i][1], (np.argmin(np.abs(m[i][1]))))
         #if (m[i][1][max_val[0]][max_val[1]] != np.abs(m[i][1]).max()):
        #     print("error")
       #      print(m[i][1][max_val[0]][max_val[1]])
        #     print(np.abs(m[i][1]).max())
-        m[i][1][max_val[0]][max_val[1]] = 0
+        m[i][1][max_val[0]][max_val[1]] = 100
         maxs[-1].append(max_val)
         min_num+=1
         
