@@ -171,3 +171,13 @@ tak = get_safe_weights_caller((x_test_upper), (y_test_upper), model)
 model.set_weights(w)
 model.evaluate(x_test,y_test)
 '''
+
+def overwrite(values,mats)
+    new_mats=[]
+    new_values=[]
+    for matrix in mats:
+        new_mats.append((matrix==0).astype(int))
+    for i in range(len(values)):
+        new_values.append((new_mats[i]*values[i])+mats[i])
+    return new_values 
+
