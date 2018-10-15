@@ -190,7 +190,7 @@ def overwrite(model,mats):
 input = Input(shape=(x_train.shape[1]**2,))
 x = Dense(x.shape[1], activation='relu')(input)
 x = Dense(512, activation='relu')(x)
-output = Dense(y.shape[1], activation='softmax')
+output = Dense(10, activation='softmax')(x)
 model = Model(input,output)
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
