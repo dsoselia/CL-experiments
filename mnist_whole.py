@@ -19,8 +19,8 @@ from keras.layers import Activation
 from keras.optimizers import SGD
 from keras.layers import Input, Dense
 from keras.layers import Dropout
-from keras.callbacks import LambdaCallback
-
+from keras.callbacks import LambdaCallback, TensorBoard
+import tensorflow as tf
 import numpy as np
 from keras import backend as K
 
@@ -85,7 +85,7 @@ def train(x , y, x_test, y_test, class_number, model, epochs = 3 ):
     class_weights = class_weight.compute_class_weight('balanced',
                                                      np.unique(y_ints),
                                                      y_ints)
-    model.fit(x,y,epochs = epochs,verbose=1, validation_data = (x_test, y_test),callbacks=[LambdaCallback(on_epoch_end=get_safe_weights)])
+    model.fit(x,y,epochs = epochs,verbose=1, validation_data = (x_test, y_test),callbacks=[TensorBoard(),LambdaCallback(on_epoch_end=get_safe_weights)])
     
     model.evaluate(x, y)
     model.evaluate(x_test, y_test)
@@ -111,6 +111,11 @@ def get_safe_weights_caller(x,y, model):
     return get_safe_weights(x,y,model)
 
 def get_safe_weights(epoch,logs):
+   x = np.array(x_train_lower)
+   x = x.reshape(x.shape[0], x.shape[1]**2)
+   x = x.astype('float32')
+   x = x / 255
+   y = to_categorical(np.append(y_train_lower, 9))[:-1]
    print("hohoho"+str(epoch))
    if epoch is 2:
       #get_gradients = K.function(inputs=input_tensors, outputs=gradients)
@@ -127,7 +132,53 @@ def get_safe_weights(epoch,logs):
             temp_length = len(temp_layers)
             for j in range(0,temp_length):
                temp_layers[j].set_weights(trainable_weights[j])
-            gradients.append(temp_model.optimizer.get_gradients(temp_model.total_loss, trainables[i].weights))
+            
+            #K.function([trainables[0].weights[0]], temp_model.optimizer.get_gradients(temp_model.total_loss, trainables[0].weights[0]))([trainables[i].get_weights()[0]])
+            
+            ww = trainables[0].weights[0]
+            #t_grad=temp_model.optimizer.get_gradients(temp_model.total_loss, ww)
+            #t_grad=temp_model.optimizer.get_gradients(temp_model.output, ww)
+            
+            
+            
+            t_grad = K.gradients(temp_model.total_loss, ww)
+            sess1 = K.get_session()
+            #target = sess1.graph.get_tensor_by_name('out_target_65')
+            #print(target)
+            print(ww)
+            saved1=''
+            saved2=''
+            try:
+               evaluated_gradients = sess1.run(t_grad,feed_dict={temp_model.layers[0].input:x, ww: np.ones(ww.shape)})
+            except Exception as e: 
+                exc=str(e)
+                exc = exc[exc.index('out_target_'):].replace('out_target_','')
+                exc = exc[0:exc.index('\'')]
+                saved1='out_target_'+exc+':0'
+            
+            target = sess1.graph.get_tensor_by_name(saved1)
+            try:
+               evaluated_gradients = sess1.run(t_grad,feed_dict={temp_model.layers[0].input:x,target:y, ww: np.ones(ww.shape)})
+            except Exception as e: 
+                exc=str(e)
+                exc = exc[exc.index('out_sample_weights_'):].replace('out_sample_weights_','')
+                exc = exc[0:exc.index('\'')]
+                saved2='out_sample_weights_'+exc+':0'
+            wholder = sess1.graph.get_tensor_by_name(saved2)
+            
+            evaluated_gradients = sess1.run(t_grad,feed_dict={temp_model.layers[0].input:x,target:y, ww: np.ones(ww.shape)})
+            print("yoloswag")
+            print(evaluated_gradients)
+            print(t_grad)
+            K.function([trainables[1].weights[0]], t_grad)([np.ones(trainables[1].weights[0].shape, dtype='float32')])
+               
+            
+            
+            subgradient = []
+            for k in range(0,len(trainables[i].get_weights())):               
+               subgradient.append(K.function([trainables[i].weights[k]], temp_model.optimizer.get_gradients(temp_model.total_loss, trainables[i].weights[k]))([trainables[i].get_weights()[k]]))
+            gradients.append(subgradient)
+    
          ret = []
          for elem in gradients:
             retj=[]
@@ -186,10 +237,10 @@ def overwrite(layer,mats):
 
 
 
-input = Input(shape=(x_train.shape[1]**2,))
-x = Dense(x.shape[1], activation='relu')(input)
-x = Dense(512, activation='relu')(x)
-output = Dense(10, activation='softmax')(x)
+input = Input(shape=(x_train.shape[1]**2,),name='inp')
+x = Dense(x.shape[1], activation='relu',name='d1')(input)
+x = Dense(512, activation='relu',name='d2')(x)
+output = Dense(10, activation='softmax',name='out')(x)
 model = Model(input,output)
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 

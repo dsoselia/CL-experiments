@@ -14,12 +14,11 @@ from sklearn import preprocessing
 import keras
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
-from keras.models import Model
+from keras.models import Sequential
 from keras.layers import Activation
 from keras.optimizers import SGD
-from keras.layers import Input, Dense
+from keras.layers import Dense
 from keras.layers import Dropout
-
 
 import numpy as np
 from keras import backend as K
@@ -46,15 +45,15 @@ y_test = to_categorical(y_test)
 
 
 
-
-#model = Sequential()
-
-input = Input(shape=(x_train.shape[1]**2,))
-
-x = Dense(x.shape[1], activation='relu')(input)
-x = Dense(512, activation='relu')(x)
-output = Dense(y.shape[1], activation='softmax')
-model = Model(input,output)
+model = Sequential()
+model.add(Dense(x.shape[1], activation='relu'))
+model.add(Dense(512, activation='relu'))
+model.add(Dropout(0.2))
+model.add(Dense(256, activation='relu'))
+model.add(Dropout(0.2))
+model.add(Dense(64, activation='relu'))
+model.add(Dropout(0.2))
+model.add(Dense(y.shape[1], activation='softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
 y_ints = [y.argmax() for y in y]
@@ -72,44 +71,38 @@ X=x
 weights = model.weights # weight tensors
 gradients = model.optimizer.get_gradients(model.total_loss, weights) # gradient tensors
 
-
-
 input_tensors = [model.inputs[0], # input data
                  model.sample_weights[0], # sample weights
                  model.targets[0], # labels
                  K.learning_phase(), # train or test mode
 ]
 
-#gradients_1: dictionary{layer: weight gradient list}
-#for each trainable layer:
-#   gradients_1[layer]=get_gradient(layer,nextlayer)
+get_gradients = K.function(inputs=input_tensors, outputs=gradients)
+
+inputs = [X, # X input data
+          [1], # sample weights
+          y, # y labels
+          0 # learning phase in TEST mode
+]
 
 
 gradients={}
-trainables = [x for x in self.model.layers if x.trainable is True]
+trainables = [x for x in model.layers if x.trainable is True]
 trainable_weights = [x.get_weights() for x in trainables]
 i_max = len(trainables)
 
 
-for i in range(i_max-1, -1):
-   temp_model=Model(input,trainables[i])
+for i in range(i_max-1, 0,  -1):
+   temp_model=model(input,trainables[i])
+   
    temp_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
    temp_layers = [la for la in temp_model.layers if la.trainable is True]
    temp_length = len(temp_layers)
    for j in range(0,temp_length):
       temp_layers[j].set_weights(trainable_weights[j])
    gradients[trainables[i]] = temp_model.optimizers.get_gradients(temp_model.total_loss, trainables[i].weights)
-   
 
 
-
-
-  
-inputs = [X, # X input data
-          [1], # sample weights
-          y, # y labels
-          0 # learning phase in TEST mode
-]
 
 #print([a for a in zip(weights, get_gradients(inputs))])
 m = [a for a in zip(weights, get_gradients(inputs))]
@@ -142,5 +135,4 @@ for i in range(0,len(m)-1,2):
     ind += 1
 model.set_weights(w)
 model.evaluate(x_test,y_test)
-
 
