@@ -97,7 +97,7 @@ def evaluate(x,y):
     print(model.evaluate(x, y))
 
 
-devisor = 0.4
+devisor = 0.5
 def get_safe_weights_caller(x,y, model):
     x = np.array(x)
     x = x.reshape(x.shape[0], x.shape[1]**2)
@@ -105,36 +105,31 @@ def get_safe_weights_caller(x,y, model):
     x = x / 255
     y = to_categorical(np.append(y, 9))[:-1]
     return get_safe_weights(x,y,model)
-
+import keras.backend as k
+import tensorflow as tf
 def get_safe_weights(x,y,model):
     X=x
     
-    weights = model.weights # weight tensors
-    gradients = model.optimizer.get_gradients(model.total_loss, weights) # gradient tensors
+
+
+    outputTensor = model.output #Or model.layers[index].output
+    listOfVariableTensors = model.trainable_weights
+    gradients = k.gradients(outputTensor, listOfVariableTensors)
     
-    input_tensors = [model.inputs[0], # input data
-                     model.sample_weights[0], # sample weights
-                     model.targets[0], # labels
-                     K.learning_phase(), # train or test mode
-    ]
-    get_gradients = K.function(inputs=input_tensors, outputs=gradients)
-    
-    inputs = [X, # X input data
-              [1], # sample weights
-              y, # y labels
-              0 # learning phase in TEST mode
-    ]
-    
+    trainingExample = x
+    sess = tf.InteractiveSession()
+    sess.run(tf.initialize_all_variables())
+    m = sess.run(gradients,feed_dict={model.input:trainingExample})
     #print([a for a in zip(weights, get_gradients(inputs))])
-    m = [a for a in zip(weights, get_gradients(inputs))]
+    #m = [a for a in zip(weights, get_gradients(inputs))]
     annihilated = []
     maxs = []
     for i in range(0,len(m)-1,2):
         maxs.append([])
         min_num = 0
-        while(min_num<m[i][1].shape[0]*m[i][1].shape[1]*devisor):
-            max_val = index(m[i][1], (np.argmax(np.abs(m[i][1]))))
-            m[i][1][max_val[0]][max_val[1]] = 0
+        while(min_num<m[i].shape[0]*m[i].shape[1]*devisor):
+            max_val = index(m[i], (np.argmax(np.abs(m[i]))))
+            m[i][max_val[0]][max_val[1]] = 0
             maxs[-1].append(max_val)
             min_num+=1
             
@@ -194,6 +189,7 @@ for i in range(1):
 evaluate((x_test_lower), (y_test_lower))
 evaluate((x_test_upper), (y_test_upper))
 evaluate(x_test,y_test)
+<<<<<<< HEAD
 
 import torchvision.models as models
 import torch
@@ -201,3 +197,5 @@ import torch.nn as nn
 import tf_to_pytorch_resnet_152 as kle
 
 model1 = kle.KitModel()
+=======
+>>>>>>> 4e2907de3e8f671c52cb2fa9ec6dc2d70135082c
