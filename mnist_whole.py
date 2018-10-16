@@ -182,7 +182,7 @@ model.add(Dense(10, activation='softmax'))
 
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy']) 
 model = train(x_train_lower, y_train_lower,x_test_lower, y_test_lower , 10, model)
-
+model.save('tes.h5')
 safe_weights_stash = get_safe_weights_caller((x_test_lower), (y_test_lower), model)
 
 #print(model.summary())
@@ -194,3 +194,10 @@ for i in range(1):
 evaluate((x_test_lower), (y_test_lower))
 evaluate((x_test_upper), (y_test_upper))
 evaluate(x_test,y_test)
+
+import torchvision.models as models
+import torch
+import torch.nn as nn
+import tf_to_pytorch_resnet_152 as kle
+
+model1 = kle.KitModel()
