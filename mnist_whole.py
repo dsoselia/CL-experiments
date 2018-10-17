@@ -81,10 +81,10 @@ def train(x , y, x_test, y_test, class_number, model, epochs = 3 ):
     class_weights = class_weight.compute_class_weight('balanced',
                                                      np.unique(y_ints),
                                                      y_ints)
-    model.fit(x,y,epochs = epochs,verbose=1, validation_data = (x_test, y_test))
+    model.fit(x,y,epochs = epochs,verbose=0, validation_data = (x_test, y_test))
     
-    model.evaluate(x, y)
-    model.evaluate(x_test, y_test)
+    #model.evaluate(x, y)
+    #model.evaluate(x_test, y_test)
     return model
 
 def evaluate(x,y):
@@ -94,10 +94,10 @@ def evaluate(x,y):
     x = x / 255
     y = to_categorical(np.append(y, 9))[:-1]
     #print(y[:5])
-    print(model.evaluate(x, y))
+    print(model.evaluate(x, y, verbose=0))
 
 
-devisor = 0.5
+
 def get_safe_weights_caller(x,y, model):
     x = np.array(x)
     x = x.reshape(x.shape[0], x.shape[1]**2)
@@ -110,26 +110,32 @@ import tensorflow as tf
 def get_safe_weights(x,y,model):
     X=x
     
-
-
-    outputTensor = model.output #Or model.layers[index].output
-    listOfVariableTensors = model.trainable_weights
-    gradients = k.gradients(outputTensor, listOfVariableTensors)
+    weights = model.weights # weight tensors
+    gradients = model.optimizer.get_gradients(model.total_loss, weights) # gradient tensors
     
-    trainingExample = x
-    sess = tf.InteractiveSession()
-    sess.run(tf.initialize_all_variables())
-    m = sess.run(gradients,feed_dict={model.input:trainingExample})
+    input_tensors = [model.inputs[0], # input data
+                     model.sample_weights[0], # sample weights
+                     model.targets[0], # labels
+                     K.learning_phase(), # train or test mode
+    ]
+    get_gradients = K.function(inputs=input_tensors, outputs=gradients)
+    
+    inputs = [X, # X input data
+              [1], # sample weights
+              y, # y labels
+              0 # learning phase in TEST mode
+    ]
+    
     #print([a for a in zip(weights, get_gradients(inputs))])
-    #m = [a for a in zip(weights, get_gradients(inputs))]
+    m = [a for a in zip(weights, get_gradients(inputs))]
     annihilated = []
     maxs = []
     for i in range(0,len(m)-1,2):
         maxs.append([])
         min_num = 0
-        while(min_num<m[i].shape[0]*m[i].shape[1]*devisor):
-            max_val = index(m[i], (np.argmax(np.abs(m[i]))))
-            m[i][max_val[0]][max_val[1]] = 0
+        while(min_num<m[i][1].shape[0]*m[i][1].shape[1]*devisor):
+            max_val = index(m[i][1], (np.argmax(np.abs(m[i][1]))))
+            m[i][1][max_val[0]][max_val[1]] = 0
             maxs[-1].append(max_val)
             min_num+=1
             
@@ -164,28 +170,30 @@ def overwrite(model,mats):
     return new_values
 
 
-
-model = Sequential()
-model.add(Dense(x.shape[1], activation='relu'))
-model.add(Dense(512, activation='relu'))
-model.add(Dropout(0.2))
-model.add(Dense(256, activation='relu'))
-model.add(Dropout(0.2))
-model.add(Dense(64, activation='relu'))
-model.add(Dropout(0.2))
-model.add(Dense(10, activation='softmax'))
-
-model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy']) 
-model = train(x_train_lower, y_train_lower,x_test_lower, y_test_lower , 10, model)
-
-safe_weights_stash = get_safe_weights_caller((x_test_lower), (y_test_lower), model)
-
-#print(model.summary())
-for i in range(1):
-    model = train(x_train_upper, y_train_upper,x_test_upper, y_test_upper ,  10, model, 1)
-    new_values = overwrite(model, safe_weights_stash)
-    model.set_weights(new_values)
-
-evaluate((x_test_lower), (y_test_lower))
-evaluate((x_test_upper), (y_test_upper))
-evaluate(x_test,y_test)
+devisor = 0.5
+for i in range(30, 50, 2):
+    devisor = float(i)/100
+    model = Sequential()
+    model.add(Dense(x.shape[1], activation='relu'))
+    model.add(Dense(512, activation='relu'))
+    model.add(Dropout(0.2))
+    model.add(Dense(256, activation='relu'))
+    model.add(Dropout(0.2))
+    model.add(Dense(64, activation='relu'))
+    model.add(Dropout(0.2))
+    model.add(Dense(10, activation='softmax'))
+    
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy']) 
+    model = train(x_train_lower, y_train_lower,x_test_lower, y_test_lower , 10, model)
+    
+    safe_weights_stash = get_safe_weights_caller((x_test_lower), (y_test_lower), model)
+    
+    #print(model.summary())
+    for i in range(1):
+        model = train(x_train_upper, y_train_upper,x_test_upper, y_test_upper ,  10, model, 1)
+        new_values = overwrite(model, safe_weights_stash)
+        model.set_weights(new_values)
+    print(devisor)
+    (evaluate((x_test_lower), (y_test_lower)))
+    (evaluate((x_test_upper), (y_test_upper)))
+    (evaluate(x_test,y_test))
