@@ -210,7 +210,7 @@ def overwrite(model,mats):
     #print(values)
     #print(new_values)
     return new_values
-
+devisor = 0.2
 save_w  = get_safe_weights(model)
 
 
