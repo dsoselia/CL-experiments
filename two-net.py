@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 from keras.models import Model
 from keras.layers import Activation
 from keras.optimizers import SGD
-from keras.layers import Input, Dense
+from keras.layers import Input, Dense, Add
 from keras.layers import Dropout
 from keras.callbacks import LambdaCallback
 from keras import backend as K
@@ -63,11 +63,15 @@ y_test_upper = np.array(y_test_upper)
 
 #define the model
 #input = Input(shape=(x_train.shape[1]**2,))
-input = Input(shape=(x_train.shape[1]**2,))
-x = Dense(256, activation='relu')(input)
-x = Dense(512, activation='relu')(x)
-output = Dense(10, activation='softmax')(x)
-model = Model(input,output)
+model_input = Input(shape=(x_train.shape[1]**2,))
+x1 = Dense(256, activation='relu')(model_input)
+x1 = Dense(512, activation='relu')(x1)
+output_base_lt = Dense(10)(x1)
+lt_output=Activation('softmax')(output_base_lt)
+
+
+
+model = Model(model_input,output)
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
 iters=100
@@ -81,9 +85,10 @@ def weights_proc(epoch,logs):
         Y = to_categorical(np.append(y_train_lower, 9))[:-1]
         
         
-        initweights = model.get_weights() #save current weights in initweights
-        t_model = Model(model.input,model.output) #create a t_model
+         #save current weights in initweights
+        t_model = Model(model_input,lt_output) #create a t_model
         t_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+        initweights = t_model.get_weights()
         t_model.set_weights(initweights) #load the initweights in the t_model
         initloss = t_model.evaluate(X,Y,128)[0] #forward pass t_model and calculate and store loss in initloss
         scores = list() #for each weight array in the weights create a weight_shape * iters array of zeros to store the weight score data (scores)
@@ -120,7 +125,7 @@ def weights_proc(epoch,logs):
                     if temp_rand_zeros[k]<1:
                         temp_scores[k][i]=l_difference
                 scores[j] = temp_scores.reshape(shape)
-            model.set_weights(initweights) #reload initweights in t_model
+            t_model.set_weights(initweights) #reload initweights in t_model
         
         for i in range(0,len(scores)):#for each array in scores, get each iters-element column and store the sum (sum) and the number of non-zero elements, then store sum/nonzero-s in a new array of the same dims as the respective weight array (avg_scores).
             av_matrix = np.zeros(initweights[i].shape)
@@ -154,7 +159,7 @@ def train(model):
     #Yt = to_categorical(y_test_lower)[:-1]
     Yt = to_categorical(np.append(y_test_lower, 9))[:-1]
     
-    model.fit(X,Y,epochs = 4,verbose=0, validation_data = (Xt, Yt),callbacks=[LambdaCallback(on_epoch_end=weights_proc)])
+    model.fit(X,Y,epochs = 4,verbose=1, validation_data = (Xt, Yt),callbacks=[LambdaCallback(on_epoch_end=weights_proc)])
     res = list()
     res.append(model.evaluate(X, Y))
     res.append(model.evaluate(Xt, Yt))
@@ -172,7 +177,7 @@ def evaluate( x,y):
     x = x / 255
     y = to_categorical(np.append(y, 9))[:-1]
     #print(y[:5])
-    print(model.evaluate(x, y, verbose=0))
+    print(model.evaluate(x, y, verbose=1))
     
 def get_safe_weights(model):
     
@@ -189,8 +194,9 @@ def get_safe_weights(model):
             maxs[-1].append(max_val)
             min_num+=1
             
-    
-    w = model.get_weights()
+    t_model = Model(model_input,lt_output) #create a t_model
+    t_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    w = t_model.get_weights()
     ind  = 0
     for i in range(0,len(m)-1,2): 
         #print(ind)
@@ -203,7 +209,9 @@ def get_safe_weights(model):
     return [np.copy(layer) for layer in  w]
 
 def overwrite(model,mats):
-    values = model.get_weights()
+    t_model = Model(model_input,lt_output) #create a t_model
+    t_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    values = t_model.get_weights()
     new_mats=[]
     new_values=[]
     for matrix in mats:
@@ -228,22 +236,25 @@ def train1(x , y, x_test, y_test, class_number, model, epochs = 3 ):
     x_test = x_test/ 255
     y = to_categorical(np.append(y, 9))[:-1]
     y_test = to_categorical(np.append(y_test, 9))[:-1]
-
+    
+    
     
     y_ints = [y.argmax() for y in y]
     class_weights = class_weight.compute_class_weight('balanced',
                                                      np.unique(y_ints),
                                                      y_ints)
-    model.fit(x,y,epochs = epochs,verbose=0, validation_data = (x_test, y_test))
+    model.fit(x,y,epochs = epochs,verbose=1, validation_data = (x_test, y_test))
     
     #model.evaluate(x, y)
     #model.evaluate(x_test, y_test)
     return model
 
-for i in range(5):
-    model = train1(x_train_upper, y_train_upper,x_test_upper, y_test_upper ,  10, model, 3)
+for i in range(1):
+    model = train1(x_train_upper, y_train_upper,x_test_upper, y_test_upper ,  10, model, 2)
     new_values = overwrite(model, save_w)
-    model.set_weights(new_values)
+    t_model = Model(model_input,lt_output) #create a t_model
+    t_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    t_model.set_weights(new_values)
 (evaluate((x_test_lower), (y_test_lower)))
 (evaluate((x_test_upper), (y_test_upper)))
 (evaluate(x_test,y_test))

@@ -127,6 +127,7 @@ def get_safe_weights(x,y,model):
     for i in range(0,len(m)-1,2):
         maxs.append([])
         min_num = 0
+        
         while(min_num<m[i].shape[0]*m[i].shape[1]*devisor):
             max_val = index(m[i], (np.argmax(np.abs(m[i]))))
             m[i][max_val[0]][max_val[1]] = 0
