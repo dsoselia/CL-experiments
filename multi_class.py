@@ -25,23 +25,33 @@ from keras.datasets import mnist
 
 #load mnist
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
-x_train_lower = [] # corresponding to labels 0-4
+x_train_lower = [] # corresponding to labels 0-2
 y_train_lower = []
 x_test_lower = []
 y_test_lower = []
-x_train_upper = [] # corresponding to labels 5-9
+
+x_train_middle = [] #3-5
+y_train_middle = []
+x_test_middle = []
+y_test_middle = []
+
+x_train_upper = [] # 6-9
 y_train_upper = []
 x_test_upper = []
 y_test_upper = []
+
 
 
 #divide mnist into lower,upper
 for i, label in enumerate(y_train):
     x = x_train[i]
     y = y_train[i]
-    if label < 5:
+    if label < 3:
         x_train_lower.append(x)
         y_train_lower.append(y)
+    elif label<6:
+        x_train_middle.append(x)
+        y_train_middle.append(y)
     else:
         x_train_upper.append(x)
         y_train_upper.append(y)
@@ -50,34 +60,38 @@ for i, label in enumerate(y_train):
 for i, label in enumerate(y_test):
     x = x_test[i]
     y = y_test[i]
-    if label < 5:
+    if label < 3:
         x_test_lower.append(x)
         y_test_lower.append(y)
+    elif label < 6:
+        x_test_middle.append(x)
+        y_test_middle.append(y)
     else:
         x_test_upper.append(x)
         y_test_upper.append(y)
 
 x_train_lower = np.array(x_train_lower)
+x_train_middle = np.array(x_train_middle)
 x_train_upper = np.array(x_train_upper)
+
 x_test_lower = np.array(x_test_lower)
+x_test_middle = np.array(x_test_middle)
 x_test_upper = np.array(x_test_upper)
 
 y_train_lower = np.array(y_train_lower)
+y_train_middle = np.array(y_train_middle)
 y_train_upper = np.array(y_train_upper)
+
 y_test_lower = np.array(y_test_lower)
+y_test_middle = np.array(y_test_middle)
 y_test_upper = np.array(y_test_upper)
 
+training_stage_datasets = [(x_train_lower,y_train_lower), (x_train_middle,y_train_middle), (x_train_upper,y_train_upper)]
 
 #define the model
 #input = Input(shape=(x_train.shape[1]**2,))
 model_input = Input(shape=(x_train.shape[1]**2,))
 x1 = Dense(512, activation='relu')(model_input)
-x1 = Dropout(0.1)(x1)
-x1 = Dense(512, activation='relu')(x1)
-x1 = Dropout(0.1)(x1)
-x1 = Dense(512, activation='relu')(x1)
-x1 = Dropout(0.1)(x1)
-x1 = Dense(512, activation='relu')(x1)
 x1 = Dropout(0.1)(x1)
 x1 = Dense(512, activation='relu')(x1)
 x1 = Dropout(0.1)(x1)
@@ -88,16 +102,24 @@ lt_output=Activation('softmax')(output_base_lt)
 
 model = Model(model_input,lt_output)
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-
-iters=100
+iters=10
 avgscores = list()
+training_stage = 0
+
 def weights_proc(epoch,logs):
     if epoch is 3:
-        X = np.array(x_train_lower)
+        global avgscores
+        global training_stage
+        current_x = training_stage_datasets[training_stage]
+        
+        
+        temp_avg_scores=[]
+        
+        X = np.array(current_x[0])
         X = X.reshape(X.shape[0], X.shape[1]**2)
         X = X.astype('float32')
         X = X / 255
-        Y = to_categorical(np.append(y_train_lower, 9))[:-1]
+        Y = to_categorical(np.append(current_x[1], 9))[:-1]
         
         
          #save current weights in initweights
@@ -153,7 +175,14 @@ def weights_proc(epoch,logs):
                 if nonzero>0.000000001:
                     av_matrix[j]=sum/nonzero
             av_matrix = av_matrix.reshape(av_shape)
-            avgscores.append(av_matrix)
+            temp_avg_scores.append(av_matrix)
+            if len(avgscores) is 0:
+                avgscores = temp_avg_scores
+            else:
+                for i in range(0,len(avgscores)):
+                    #avgscore[i] = ((training_stage+1)*avgscores[i]+temp_avg_scores[i])/(training_stage + 2)
+                    avgscores[i] =(avgscores[i]+temp_avg_scores[i])/2
+                
         for i in range(0,len(avgscores)):
             #print(np.where(avgscores[i].flatten()>0))
             pass
@@ -194,7 +223,7 @@ def evaluate( x,y):
     #print(y[:5])
     print(model.evaluate(x, y, verbose=1))
     
-def get_safe_weights(model):
+def get_safe_weights():
     
     #print([a for a in zip(weights, get_gradients(inputs))])
     m = avgscores
@@ -203,7 +232,7 @@ def get_safe_weights(model):
     for i in range(0,len(m)-1,2):
         maxs.append([])
         min_num = 0
-        while(min_num<m[i][1].shape[0]*m[i].shape[1]*devisor):
+        while(min_num<m[i][1].shape[0]*m[i].shape[1]*devisor*(training_stage+1)):
             max_val = index(m[i], (np.argmin(np.abs(m[i]))))
             m[i][max_val[0]][max_val[1]] = 100
             maxs[-1].append(max_val)
@@ -237,10 +266,19 @@ def overwrite(model,mats):
     #print(new_values)
     return new_values
 devisor = 0.48
-save_w  = get_safe_weights(model)
+save_w  = get_safe_weights()
 
-
-def train1(x , y, x_test, y_test, class_number, epochs = 3 ):
+x2 = Dense(512, activation='relu')(model_input)
+x2 = Dropout(0.1)(x2)
+x2 = Dense(512, activation='relu')(x2)
+x2= Dropout(0.1)(x2) 
+output_base_normal = Dense(10)(x2)
+add_layer = Add()([output_base_lt,output_base_normal])
+output = Activation('softmax')(add_layer)
+    
+def train1(x , y, x_test, y_test, class_number, epochs=4):
+    global model
+    
     x = np.array(x)
     x_test = np.array(x_test)
     x = x.reshape(x.shape[0], x.shape[1]**2)
@@ -253,19 +291,7 @@ def train1(x , y, x_test, y_test, class_number, epochs = 3 ):
     y_test = to_categorical(np.append(y_test, 9))[:-1]
     
     
-    x2 = Dense(512, activation='relu')(model_input)
-    x2 = Dropout(0.1)(x2)
-    x2 = Dense(512, activation='relu')(x2)
-    x2= Dropout(0.1)(x2)
-    x2 = Dense(512, activation='relu')(x2)
-    x2 = Dropout(0.1)(x2)
-    x2 = Dense(512, activation='relu')(x2)
-    x2 = Dropout(0.1)(x2)
-    x2 = Dense(512, activation='relu')(x2)
-    x2 = Dropout(0.1)(x2)
-    output_base_normal = Dense(10)(x2)
-    add_layer = Add()([output_base_lt,output_base_normal])
-    output = Activation('softmax')(add_layer)
+    
     model = Model(model_input,output)
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])    
     
@@ -273,19 +299,30 @@ def train1(x , y, x_test, y_test, class_number, epochs = 3 ):
     class_weights = class_weight.compute_class_weight('balanced',
                                                      np.unique(y_ints),
                                                      y_ints)
-    model.fit(x,y,epochs = epochs,verbose=1, validation_data = (x_test, y_test))
+    model.fit(x,y,epochs = epochs,verbose=1, validation_data = (x_test, y_test), callbacks=[LambdaCallback(on_epoch_end=weights_proc)])
     
     #model.evaluate(x, y)
     #model.evaluate(x_test, y_test)
     return model
-
-for i in range(2):
-    model = train1(x_train_upper, y_train_upper,x_test_upper, y_test_upper ,  10, 2)
+training_stage=training_stage + 1
+for i in range(1):
+    model = train1(x_train_middle, y_train_middle,x_test_middle, y_test_middle, 10, 4)
     new_values = overwrite(model, save_w)
     t_model = Model(model_input,lt_output) #create a t_model
     t_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     t_model.set_weights(new_values)
+safe_weights = get_safe_weights()
+training_stage=training_stage + 1
+for i in range(4):
+    model = train1(x_train_upper, y_train_upper,x_test_upper, y_test_upper, 10, 1)
+    new_values = overwrite(model, safe_weights)
+    t_model = Model(model_input,lt_output) #create a t_model
+    t_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    t_model.set_weights(new_values)
+
+
 (evaluate((x_test_lower), (y_test_lower)))
+(evaluate((x_test_middle), (y_test_middle)))
 (evaluate((x_test_upper), (y_test_upper)))
 (evaluate(x_test,y_test))
 
