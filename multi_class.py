@@ -92,9 +92,9 @@ training_stage_datasets = [(x_train_lower,y_train_lower), (x_train_middle,y_trai
 #input = Input(shape=(x_train.shape[1]**2,))
 model_input = Input(shape=(x_train.shape[1]**2,))
 x1 = Dense(512, activation='relu')(model_input)
-x1 = Dropout(0.1)(x1)
+#x1 = Dropout(0.1)(x1)
 x1 = Dense(512, activation='relu')(x1)
-x1 = Dropout(0.1)(x1)
+#x1 = Dropout(0.1)(x1)
 output_base_lt = Dense(10)(x1)
 lt_output=Activation('softmax')(output_base_lt)
 
@@ -176,19 +176,14 @@ def weights_proc(epoch,logs):
                     av_matrix[j]=sum/nonzero
             av_matrix = av_matrix.reshape(av_shape)
             temp_avg_scores.append(av_matrix)
-            if len(avgscores) is 0:
-                avgscores = temp_avg_scores
-            else:
-                for i in range(0,len(avgscores)):
-                    #avgscore[i] = ((training_stage+1)*avgscores[i]+temp_avg_scores[i])/(training_stage + 2)
-                    avgscores[i] =(avgscores[i]+temp_avg_scores[i])/2
-                
-        for i in range(0,len(avgscores)):
-            #print(np.where(avgscores[i].flatten()>0))
-            pass
+        if len(avgscores) is 0:
+            avgscores = temp_avg_scores
+        else:
+            for i in range(0,len(avgscores)):
+                avgscores[i] = ((training_stage)*avgscores[i]+temp_avg_scores[i])/(training_stage + 1)
 
 
-def train(model):
+def initial_train():
     X = np.array(x_train_lower)
     X = X.reshape(X.shape[0], X.shape[1]**2)
     X = X.astype('float32')
@@ -204,16 +199,11 @@ def train(model):
     Yt = to_categorical(np.append(y_test_lower, 9))[:-1]
     
     model.fit(X,Y,epochs = 4,verbose=1, validation_data = (Xt, Yt),callbacks=[LambdaCallback(on_epoch_end=weights_proc)])
-    res = list()
-    res.append(model.evaluate(X, Y))
-    res.append(model.evaluate(Xt, Yt))
-    return res
-    
-    
-res = train(model)
+
 def index(matrix, a):
     #print(matrix.shape)
     return ([(int(a/matrix.shape[1])), a%int(matrix.shape[1])])
+
 def evaluate( x,y):
     x = np.array(x)
     x = x.reshape(x.shape[0], x.shape[1]**2)
@@ -222,59 +212,59 @@ def evaluate( x,y):
     y = to_categorical(np.append(y, 9))[:-1]
     #print(y[:5])
     print(model.evaluate(x, y, verbose=1))
-    
-def get_safe_weights():
-    
-    #print([a for a in zip(weights, get_gradients(inputs))])
-    m = avgscores
-    annihilated = []
-    maxs = []
-    for i in range(0,len(m)-1,2):
-        maxs.append([])
-        min_num = 0
-        while(min_num<m[i][1].shape[0]*m[i].shape[1]*devisor*(training_stage+1)):
-            max_val = index(m[i], (np.argmin(np.abs(m[i]))))
-            m[i][max_val[0]][max_val[1]] = 100
-            maxs[-1].append(max_val)
-            min_num+=1
-            
-    t_model = Model(model_input,lt_output) #create a t_model
-    t_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-    w = t_model.get_weights()
-    ind  = 0
-    for i in range(0,len(m)-1,2): 
-        #print(ind)
-        #print(maxs[ind])
-        for max_value in maxs[ind]:
-            weight_to_change = [i,max_value[0],max_value[1]]
-            w[weight_to_change[0]][weight_to_change[1]][weight_to_change[2]] = 0
-            annihilated.append(weight_to_change)
-        ind += 1
-    return [np.copy(layer) for layer in  w]
 
-def overwrite(model,mats):
-    t_model = Model(model_input,lt_output) #create a t_model
-    t_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-    values = t_model.get_weights()
+def eval_all():
+    print("lower")
+    (evaluate((x_train_lower), (y_train_lower)))
+    (evaluate((x_test_lower), (y_test_lower)))
+
+    print("middle")
+    (evaluate((x_train_middle), (y_train_middle)))
+    (evaluate((x_test_middle), (y_test_middle)))
+
+    print("upper")
+    (evaluate((x_train_upper), (y_train_upper)))
+    (evaluate((x_test_upper), (y_test_upper)))
+
+    print("all")
+    (evaluate(x_train,y_train))
+    (evaluate(x_test,y_test))
+
+
+
+def filtered_weights(weights_to_skip=0):
+    #percentile = 100 - (training_stage+1)*divisor*100
+    percentile = 100 - divisor*100
+    m = avgscores
+    weights = model.get_weights()
+    filtered = []
+    for i in range(0, len(weights)-weights_to_skip):
+        current_shape = weights[i].shape
+        unrolled_scores = m[i].flatten()
+        unrolled_weights = weights[i].flatten()
+        minp = np.percentile(unrolled_scores,percentile)
+        for j in range(0,len(unrolled_scores)):
+            if unrolled_scores[j]<minp:
+                unrolled_weights[j]=0
+        filtered.append(unrolled_weights.reshape(current_shape))
+    for i in range(len(weights)-weights_to_skip, len(weights)):
+        filtered.append(weights[i])
+    return filtered
+
+def overwrite(mats):
+    #t_model = Model(model_input,lt_output) #create a t_model
+    #t_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    values = model.get_weights()
     new_mats=[]
     new_values=[]
     for matrix in mats:
         new_mats.append((matrix==0).astype(int))
     for i in range(len(values)):
-        new_values.append((new_mats[i]*values[i])+mats[i])
+        new_values.append((new_mats[i]*values[i])+mats[i]) 
     #print(values)
     #print(new_values)
     return new_values
-devisor = 0.48
-save_w  = get_safe_weights()
 
-x2 = Dense(512, activation='relu')(model_input)
-x2 = Dropout(0.1)(x2)
-x2 = Dense(512, activation='relu')(x2)
-x2= Dropout(0.1)(x2) 
-output_base_normal = Dense(10)(x2)
-add_layer = Add()([output_base_lt,output_base_normal])
-output = Activation('softmax')(add_layer)
     
 def train1(x , y, x_test, y_test, class_number, epochs=4):
     global model
@@ -292,8 +282,9 @@ def train1(x , y, x_test, y_test, class_number, epochs=4):
     
     
     
-    model = Model(model_input,output)
-    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])    
+    #model = Model(model_input,output)
+    #model = Model(model_input,lt_output)
+    #model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])    
     
     y_ints = [y.argmax() for y in y]
     class_weights = class_weight.compute_class_weight('balanced',
@@ -303,26 +294,33 @@ def train1(x , y, x_test, y_test, class_number, epochs=4):
     
     #model.evaluate(x, y)
     #model.evaluate(x_test, y_test)
-    return model
+    #return model
+
+
+initial_train()
+divisor = 0.3
+saved_w  = filtered_weights()
+#x2 = Dense(512, activation='relu')(model_input)
+#x2 = Dropout(0.1)(x2)
+#x2 = Dense(512, activation='relu')(x2)
+#x2= Dropout(0.1)(x2) 
+#output_base_normal = Dense(10)(x2)
+#add_layer = Add()([output_base_lt,output_base_normal])
+#output = Activation('softmax')(add_layer)
+eval_all()
+
 training_stage=training_stage + 1
 for i in range(1):
-    model = train1(x_train_middle, y_train_middle,x_test_middle, y_test_middle, 10, 4)
-    new_values = overwrite(model, save_w)
-    t_model = Model(model_input,lt_output) #create a t_model
-    t_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-    t_model.set_weights(new_values)
-safe_weights = get_safe_weights()
+    train1(x_train_middle, y_train_middle,x_test_middle, y_test_middle, 10, 4)
+    new_values = overwrite(saved_w)
+    model.set_weights(new_values)
+    
+saved_w = filtered_weights()
 training_stage=training_stage + 1
-for i in range(4):
-    model = train1(x_train_upper, y_train_upper,x_test_upper, y_test_upper, 10, 1)
-    new_values = overwrite(model, safe_weights)
-    t_model = Model(model_input,lt_output) #create a t_model
-    t_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-    t_model.set_weights(new_values)
+eval_all()
 
-
-(evaluate((x_test_lower), (y_test_lower)))
-(evaluate((x_test_middle), (y_test_middle)))
-(evaluate((x_test_upper), (y_test_upper)))
-(evaluate(x_test,y_test))
-
+for i in range(1):
+    train1(x_train_upper, y_train_upper,x_test_upper, y_test_upper, 10, 1)
+    new_values = overwrite(saved_w)
+    model.set_weights(new_values)
+eval_all()    
