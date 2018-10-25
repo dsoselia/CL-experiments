@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 from keras.models import Model
 from keras.layers import Activation
 from keras.optimizers import SGD
-from keras.layers import Input, Dense
+from keras.layers import Input, Dense, average
 from keras.layers import Dropout
 from keras.callbacks import LambdaCallback
 from keras import backend as K
@@ -95,15 +95,25 @@ classes=10
 
 #define the model
 #input = Input(shape=(x_train.shape[1]**2,))
-input = Input(shape=(x_train.shape[1]**2,))
-x = Dense(256, activation='relu')(input)
+input_layer = Input(shape=(x_train.shape[1]**2,))
+x = Dense(256, activation='relu')(input_layer)
 x = Dense(512, activation='relu')(x)
-output = Dense(classes, activation='softmax')(x)
-model = Model(input,output)
+continual_beforemax = Dense(classes)(x)
+continual_out = Activation('softmax')(continual_beforemax)
+
+x2 = Dense(256, activation='relu')(input_layer)
+x2 = Dense(512, activation='relu')(x2)
+x2 = Dense(classes, activation='relu')(x2)
+x2 = average([x2,continual_beforemax])
+output = Activation('softmax')(x2)
+cont_model= Model(input_layer,continual_out)
+model = Model(input_layer,output)
+model = cont_model #KEEP THIS LINE TO DISABLE THE NON-CONTINUOUS MODEL
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+cont_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
 
-
+iter_change = 0.2
 training_stage = 0
 iters=100
 avgscores = list()
@@ -118,11 +128,11 @@ def weights_proc(epoch,logs):
         Y = to_categorical(np.append(y_train_lower, classes-1))[:-1]
         
         
-        initweights = model.get_weights() #save current weights in initweights
-        t_model = Model(model.input,model.output) #create a t_model
+        initweights = cont_model.get_weights() #save current weights in initweights
+        t_model = Model(model.input,continual_out) #create a t_model
         t_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
         t_model.set_weights(initweights) #load the initweights in the t_model
-        initloss = t_model.evaluate(X,Y,128)[0] #forward pass t_model and calculate and store loss in initloss
+        initloss = t_model.evaluate(X,Y,128, verbose=0)[0] #forward pass t_model and calculate and store loss in initloss
         scores = list() #for each weight array in the weights create a weight_shape * iters array of zeros to store the weight score data (scores)
         for i in range(0,len(initweights)):
             shape = list(initweights[i].shape)
@@ -137,7 +147,7 @@ def weights_proc(epoch,logs):
                 shape = to_append.shape
                 to_append = to_append.flatten()
                 for element in range(0,len(to_append)):
-                    if random.random() < 0.8:
+                    if random.random() < (1-iter_change):
                         to_append[element]=to_append[element]
                     else:
                         to_append[element]=0
@@ -148,7 +158,7 @@ def weights_proc(epoch,logs):
                 temp_weights.append(randomzeros[j]*initweights[j])
             
             t_model.set_weights(temp_weights)
-            l_difference = abs(initloss - t_model.evaluate(X,Y,128)[0]) #forward-pass t_model, calculate the loss, store abs(loss-initloss) in l_difference
+            l_difference = abs(initloss - t_model.evaluate(X,Y,128, verbose=0)[0]) #forward-pass t_model, calculate the loss, store abs(loss-initloss) in l_difference
             for j in range(0,len(randomzeros)): #for each array in randomzeros (indexed with j), search for zeros, and for each zero at a position x,y store l_difference in scores[j][x][y][i]
                 shape = scores[j].shape
                 temp_rand_zeros = randomzeros[j].flatten()
@@ -157,7 +167,8 @@ def weights_proc(epoch,logs):
                     if temp_rand_zeros[k]<1:
                         temp_scores[k][i]=l_difference
                 scores[j] = temp_scores.reshape(shape)
-            model.set_weights(initweights) #reload initweights in t_model
+            
+            t_model.set_weights(initweights) #reload initweights in t_model
         
         for i in range(0,len(scores)):#for each array in scores, get each iters-element column and store the sum (sum) and the number of non-zero elements, then store sum/nonzero-s in a new array of the same dims as the respective weight array (avg_scores).
             av_matrix = np.zeros(initweights[i].shape)
@@ -208,7 +219,7 @@ def train(model):
     return res
     
     
-res = train(model)
+
 def index(matrix, a):
     #print(matrix.shape)
     return ([(int(a/matrix.shape[1])), a%int(matrix.shape[1])])
@@ -219,41 +230,13 @@ def evaluate(x,y):
     x = x / 255
     y = to_categorical(np.append(y, classes-1))[:-1]
     #print(y[:5])
-    print(model.evaluate(x, y, verbose=0))
+    return model.evaluate(x, y, verbose=0)
     
-def ge1t_safe_weights(model):
-    
-    #print([a for a in zip(weights, get_gradients(inputs))])
-    m = avgscores
-    annihilated = []
-    maxs = []
-    for i in range(0,len(m)-1,2):
-        maxs.append([])
-        min_num = 0
-        while(min_num<m[i][1].shape[0]*m[i].shape[1]*divisor):
-            max_val = index(m[i], (np.argmin(np.abs(m[i]))))
-            m[i][max_val[0]][max_val[1]] = 100
-            maxs[-1].append(max_val)
-            min_num+=1
-            
-    
-    w = model.get_weights()
-    ind  = 0
-    for i in range(0,len(m)-1,2): 
-        #print(ind)
-        #print(maxs[ind])
-        for max_value in maxs[ind]:
-            weight_to_change = [i,max_value[0],max_value[1]]
-            w[weight_to_change[0]][weight_to_change[1]][weight_to_change[2]] = 0
-            annihilated.append(weight_to_change)
-        ind += 1
-    return [np.copy(layer) for layer in  w]
-
-def get_safe_weights(model, weights_to_skip=2):
+def get_safe_weights(weights_to_skip=2):
     #percentile = 100 - (training_stage+1)*divisor*100
     percentile = 100 - divisor*100
     m = avgscores
-    weights = model.get_weights()
+    weights = cont_model.get_weights()
     filtered = []
     for i in range(0, len(weights)-weights_to_skip):
         current_shape = weights[i].shape
@@ -273,8 +256,8 @@ def get_safe_weights(model, weights_to_skip=2):
         filtered.append(weights[i])
     return filtered
 
-def overwrite(model,mats):
-    values = model.get_weights()
+def overwrite(mats):
+    values = cont_model.get_weights()
     new_mats=[]
     new_values=[]
     for matrix in mats:
@@ -284,8 +267,6 @@ def overwrite(model,mats):
     #print(values)
     #print(new_values)
     return new_values
-divisor = 0.48
-save_w  = get_safe_weights(model)
 
 
 def train1(x , y, x_test, y_test, class_number, model, epochs = 3 ):
@@ -311,20 +292,71 @@ def train1(x , y, x_test, y_test, class_number, model, epochs = 3 ):
     #model.evaluate(x_test, y_test)
     return model
 
+
+divisor = 0.5
+res = train(model)
+save_w  = get_safe_weights()
 training_stage+=1
 for i in range(1):
     model = train1(x_train_middle, y_train_middle,x_test_middle, y_test_middle, classes, model, 3)
-    new_values = overwrite(model, save_w)
-    model.set_weights(new_values)
+    new_values = overwrite(save_w)
+    cont_model.set_weights(new_values)
 
+save_w  = get_safe_weights()
 training_stage+=1
 for i in range(1):
     model = train1(x_train_upper, y_train_upper,x_test_upper, y_test_upper, classes, model, 3)
-    new_values = overwrite(model, save_w)
-    model.set_weights(new_values)
+    new_values = overwrite(save_w)
+    cont_model.set_weights(new_values)
     
 (evaluate((x_test_lower), (y_test_lower)))
 (evaluate((x_test_middle), (y_test_middle)))
 (evaluate((x_test_upper), (y_test_upper)))
 #(evaluate(x_test,y_test))
+avgscores=list()
+training_stage = 0
+
+for i in range(0,5):
+    divisor=0.4+i*0.05
+    for j in range(0,5):
+        iter_change=0.1+j*0.1
+        avgscores=list()
+        training_stage = 0
+        input_layer = Input(shape=(x_train.shape[1]**2,))
+        x = Dense(256, activation='relu')(input_layer)
+        x = Dense(512, activation='relu')(x)
+        continual_beforemax = Dense(classes)(x)
+        continual_out = Activation('softmax')(continual_beforemax)
+        x2 = Dense(256, activation='relu')(input_layer)
+        x2 = Dense(512, activation='relu')(x2)
+        x2 = Dense(classes, activation='relu')(x2)
+        x2 = average([x2,continual_beforemax])
+        output = Activation('softmax')(x2)
+        cont_model= Model(input_layer,continual_out)
+        model = Model(input_layer,output)
+        model = cont_model #KEEP THIS LINE TO DISABLE THE NON-CONTINUOUS MODEL
+        model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+        cont_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+        res = train(model)
+        save_w  = get_safe_weights()
+        training_stage+=1
+        for i in range(1):
+            model = train1(x_train_middle, y_train_middle,x_test_middle, y_test_middle, classes, model, 3)
+            new_values = overwrite(save_w)
+            cont_model.set_weights(new_values)
+            save_w  = get_safe_weights()
+            training_stage+=1
+        for i in range(1):
+            model = train1(x_train_upper, y_train_upper,x_test_upper, y_test_upper, classes, model, 3)
+            new_values = overwrite(save_w)
+            cont_model.set_weights(new_values)    
+        print("next iter")
+        log_message=""
+        log_message+=str(evaluate((x_test_lower), (y_test_lower)))+","
+        log_message+=str(evaluate((x_test_middle), (y_test_middle)))+","
+        log_message+=str(evaluate((x_test_upper), (y_test_upper)))+"\n"
+        print(log_message)
+        file=open("fullog.csv",'a+')
+        file.write(log_message)
+        file.close()
 

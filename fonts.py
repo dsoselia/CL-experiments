@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Oct 23 12:56:58 2018
+
+@author: admin-pc
+"""
 import random
 import numpy as np
 import pandas as pd
@@ -29,67 +35,25 @@ y_test_upper = []
 
 
 #divide mnist into lower,upper
-(x_train, y_train), (x_test, y_test) = mnist.load_data()
-x_train_lower = [] # corresponding to labels 0-2
-y_train_lower = []
-x_test_lower = []
-y_test_lower = []
+x_l,y_l,x_u,y_u = load_font20()
 
-x_train_middle = [] #3-5
-y_train_middle = []
-x_test_middle = []
-y_test_middle = []
+dataset_size = 90000
+(x_train, y_train), (x_test, y_test) = mnist.load_data()
+x_train_lower   = x_l[:int(x_l.shape[0]*0.8)]
+y_train_lower = y_l[: int(x_l.shape[0]*0.8)]
+x_test_lower =  x_l[int(x_l.shape[0]*0.8):]
+y_test_lower = y_l[int(x_l.shape[0]*0.8):]
+
+x_train_middle = x_u[:int(x_u.shape[0]*0.8)]
+y_train_middle = y_u[:int(x_u.shape[0]*0.8)]
+x_test_middle = x_u[:int(x_u.shape[0]*0.8):]
+y_test_middle = y_u[int(x_u.shape[0]*0.8):]
 
 x_train_upper = [] # 6-9
 y_train_upper = []
 x_test_upper = []
 y_test_upper = []
 
-
-
-#divide mnist into lower,upper
-for i, label in enumerate(y_train):
-    x = x_train[i]
-    y = y_train[i]
-    if label < 3:
-        x_train_lower.append(x)
-        y_train_lower.append(y)
-    elif label<6:
-        x_train_middle.append(x)
-        y_train_middle.append(y)
-    else:
-        x_train_upper.append(x)
-        y_train_upper.append(y)
-
-
-for i, label in enumerate(y_test):
-    x = x_test[i]
-    y = y_test[i]
-    if label < 3:
-        x_test_lower.append(x)
-        y_test_lower.append(y)
-    elif label < 6:
-        x_test_middle.append(x)
-        y_test_middle.append(y)
-    else:
-        x_test_upper.append(x)
-        y_test_upper.append(y)
-
-x_train_lower = np.array(x_train_lower)
-x_train_middle = np.array(x_train_middle)
-x_train_upper = np.array(x_train_upper)
-
-x_test_lower = np.array(x_test_lower)
-x_test_middle = np.array(x_test_middle)
-x_test_upper = np.array(x_test_upper)
-
-y_train_lower = np.array(y_train_lower)
-y_train_middle = np.array(y_train_middle)
-y_train_upper = np.array(y_train_upper)
-
-y_test_lower = np.array(y_test_lower)
-y_test_middle = np.array(y_test_middle)
-y_test_upper = np.array(y_test_upper)
 
 classes=10
 
@@ -112,10 +76,9 @@ def weights_proc(epoch,logs):
     if epoch is 2:
         loc_av=[]
         X = np.array(x_train_lower)
-        X = X.reshape(X.shape[0], X.shape[1]**2)
         X = X.astype('float32')
         X = X / 255
-        Y = to_categorical(np.append(y_train_lower, classes-1))[:-1]
+        Y = y_train_lower
         
         
         initweights = model.get_weights() #save current weights in initweights
@@ -188,18 +151,16 @@ def weights_proc(epoch,logs):
 
 def train(model):
     X = np.array(x_train_lower)
-    X = X.reshape(X.shape[0], X.shape[1]**2)
     X = X.astype('float32')
     X = X / 255
     #Y = to_categorical(y_train_lower)[:-1]
-    Y = to_categorical(np.append(y_train_lower, classes-1))[:-1]
+    Y = y_train_lower
     
     Xt = np.array(x_test_lower)
-    Xt = Xt.reshape(Xt.shape[0], Xt.shape[1]**2)
     Xt = Xt.astype('float32')
     Xt = Xt / 255
     #Yt = to_categorical(y_test_lower)[:-1]
-    Yt = to_categorical(np.append(y_test_lower, classes-1))[:-1]
+    Yt  =y_test_lower
     
     model.fit(X,Y,epochs = 4,verbose=0, validation_data = (Xt, Yt),callbacks=[LambdaCallback(on_epoch_end=weights_proc)])
     res = list()
@@ -214,10 +175,9 @@ def index(matrix, a):
     return ([(int(a/matrix.shape[1])), a%int(matrix.shape[1])])
 def evaluate(x,y):
     x = np.array(x)
-    x = x.reshape(x.shape[0], x.shape[1]**2)
     x = x.astype('float32')
     x = x / 255
-    y = to_categorical(np.append(y, classes-1))[:-1]
+    y = y
     #print(y[:5])
     print(model.evaluate(x, y, verbose=0))
     
@@ -291,14 +251,12 @@ save_w  = get_safe_weights(model)
 def train1(x , y, x_test, y_test, class_number, model, epochs = 3 ):
     x = np.array(x)
     x_test = np.array(x_test)
-    x = x.reshape(x.shape[0], x.shape[1]**2)
-    x_test = x_test.reshape(x_test.shape[0], x_test.shape[1]**2)
     x = x.astype('float32')
     x_test = x_test.astype('float32')
     x = x / 255
     x_test = x_test/ 255
-    y = to_categorical(np.append(y, classes-1))[:-1]
-    y_test = to_categorical(np.append(y_test, classes-1))[:-1]
+    y = y
+    y_test = y_test
 
     
     y_ints = [y.argmax() for y in y]
@@ -316,7 +274,7 @@ for i in range(1):
     model = train1(x_train_middle, y_train_middle,x_test_middle, y_test_middle, classes, model, 3)
     new_values = overwrite(model, save_w)
     model.set_weights(new_values)
-
+'''
 training_stage+=1
 for i in range(1):
     model = train1(x_train_upper, y_train_upper,x_test_upper, y_test_upper, classes, model, 3)
@@ -328,3 +286,4 @@ for i in range(1):
 (evaluate((x_test_upper), (y_test_upper)))
 #(evaluate(x_test,y_test))
 
+'''
