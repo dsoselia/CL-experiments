@@ -15,7 +15,19 @@ from keras.callbacks import LambdaCallback
 from keras import backend as K
 from sklearn.utils import class_weight
 from keras.datasets import mnist
+import os
+TRAS = False
+ 
+acc_lower =[]
+acc_middle =[]
+acc_upper =[]
 
+try:
+    os.remove('lower.csv')
+    os.remove('middle.csv')
+    os.remove('upper.csv')
+except:
+    pass
 #load mnist
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
 x_train_lower = [] # corresponding to labels 0-4
@@ -112,14 +124,21 @@ model = cont_model #KEEP THIS LINE TO DISABLE THE NON-CONTINUOUS MODEL
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 cont_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
+input_1 = Input(shape=(784,))
+x_1 = Dense(256, activation='relu')(input_1)
+x_1 = Dense(512, activation='relu')(x_1)
+output_1 = Dense(classes, activation='softmax')(x_1)
+model_1 = Model(input_1,output_1)
+model_1.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
 
 
 training_stage = 0
-iters=100
+iters=200
 avgscores = list()
 def weights_proc(epoch,logs):
     global avgscores
-    if epoch is 2:
+    if epoch is 2 or TRAS:
         loc_av=[]
         X = np.array(x_train_lower)
         X = X.reshape(X.shape[0], X.shape[1]**2)
@@ -158,7 +177,7 @@ def weights_proc(epoch,logs):
                 temp_weights.append(randomzeros[j]*initweights[j])
             
             t_model.set_weights(temp_weights)
-            l_difference = abs(initloss - t_model.evaluate(X,Y,128)[0]) #forward-pass t_model, calculate the loss, store abs(loss-initloss) in l_difference
+            l_difference = abs(initloss - t_model.evaluate(X,Y,128, verbose = 0)[0]) #forward-pass t_model, calculate the loss, store abs(loss-initloss) in l_difference
             for j in range(0,len(randomzeros)): #for each array in randomzeros (indexed with j), search for zeros, and for each zero at a position x,y store l_difference in scores[j][x][y][i]
                 shape = scores[j].shape
                 temp_rand_zeros = randomzeros[j].flatten()
@@ -220,6 +239,7 @@ def train(model):
     
     
 res = train(model)
+
 def index(matrix, a):
     #print(matrix.shape)
     return ([(int(a/matrix.shape[1])), a%int(matrix.shape[1])])
@@ -231,6 +251,11 @@ def evaluate(x,y):
     y = to_categorical(np.append(y, classes-1))[:-1]
     #print(y[:5])
     print(model.evaluate(x, y, verbose=0))
+    a_1 = model.evaluate(x, y, verbose=0)
+    a_2 = model_1.evaluate(x,y, verbose = 0)
+    print(a_1)
+    print(a_2)
+    return [a_1[0], a_1[1],a_2[0], a_2[1]]
     
 def get_safe_weights(weights_to_skip=2):
     #percentile = 100 - (training_stage+1)*divisor*100
@@ -267,9 +292,17 @@ def overwrite(mats):
     #print(values)
     #print(new_values)
     return new_values
-divisor = 0.5
+divisor = 0.8
 save_w  = get_safe_weights()
 
+def log( values , filename = 'lower.csv'):
+    file=open(filename,'a+')
+    log1 = ""
+    for val in values:
+        log1 += str(val)+" , "
+    log1 += '\n'
+    file.write(log1)
+    file.close()    
 
 def train1(x , y, x_test, y_test, class_number, model, epochs = 3 ):
     x = np.array(x)
@@ -294,18 +327,64 @@ def train1(x , y, x_test, y_test, class_number, model, epochs = 3 ):
     #model.evaluate(x_test, y_test)
     return model
 
+def train_emp(x , y, x_test, y_test, class_number, model, epochs = 1 ):
+    x = np.array(x)
+    x_test = np.array(x_test)
+    x = x.reshape(x.shape[0], x.shape[1]**2)
+    x_test = x_test.reshape(x_test.shape[0], x_test.shape[1]**2)
+    x = x.astype('float32')
+    x_test = x_test.astype('float32')
+    x = x / 255
+    x_test = x_test/ 255
+    y = to_categorical(np.append(y, classes-1))[:-1]
+    y_test = to_categorical(np.append(y_test, classes-1))[:-1]
+
+    
+    y_ints = [y.argmax() for y in y]
+    class_weights = class_weight.compute_class_weight('balanced',
+                                                     np.unique(y_ints),
+                                                     y_ints)
+    model.fit(x,y,epochs = epochs,verbose=0, validation_data = (x_test, y_test))
+
+    return model
+
+model_1 = train_emp(x_train_lower, y_train_lower, x_test_lower, y_test_lower, classes, model_1, 3 )
+
+res = (evaluate((x_test_lower), (y_test_lower)))
+log(res)
+
+
+
 training_stage+=1
-for i in range(1):
-    model = train1(x_train_middle, y_train_middle,x_test_middle, y_test_middle, classes, model, 3)
+for i in range(3):
+    if(i == 3 ):
+        TRAS = True
+    model = train1(x_train_middle, y_train_middle,x_test_middle, y_test_middle, classes, model, 1)
     new_values = overwrite(save_w)
     cont_model.set_weights(new_values)
-
+    model_1 = train_emp(x_train_middle, y_train_middle,x_test_middle, y_test_middle, classes, model_1, 1 )
+    res = (evaluate((x_test_lower), (y_test_lower)))
+    log(res)
+    res = (evaluate((x_test_middle), (y_test_middle)))
+    log(res, 'middle.csv')
+    
+TRAS = False
 save_w  = get_safe_weights()
 training_stage+=1
-for i in range(1):
-    model = train1(x_train_upper, y_train_upper,x_test_upper, y_test_upper, classes, model, 3)
+for i in range(3):
+    model = train1(x_train_upper, y_train_upper,x_test_upper, y_test_upper, classes, model, 1)
     new_values = overwrite(save_w)
     cont_model.set_weights(new_values)
+    model_1 = train_emp(x_train_upper, y_train_upper,x_test_upper, y_test_upper, classes, model_1, 1)
+    res = (evaluate((x_test_lower), (y_test_lower)))
+    acc_lower.append(res)
+    log(res)
+    res = (evaluate((x_test_middle), (y_test_middle)))
+    acc_middle.append(res)
+    log(res, 'middle.csv')
+    res = (evaluate((x_test_upper), (y_test_upper)))
+    acc_upper.append(res)
+    log(res, 'upper.csv')
     
 (evaluate((x_test_lower), (y_test_lower)))
 (evaluate((x_test_middle), (y_test_middle)))
